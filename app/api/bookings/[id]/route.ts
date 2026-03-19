@@ -30,7 +30,19 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { status } = body
+    const { status, admin_notes } = body
+
+    // Admin notes update only
+    if (admin_notes !== undefined && !status) {
+      const { data, error } = await getSupabaseAdmin()
+        .from('bookings')
+        .update({ admin_notes })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) return NextResponse.json({ error: 'Aggiornamento fallito.' }, { status: 500 })
+      return NextResponse.json(data)
+    }
 
     if (!['pending', 'confirmed', 'cancelled'].includes(status)) {
       return NextResponse.json({ error: 'Stato non valido.' }, { status: 400 })
@@ -48,7 +60,7 @@ export async function PATCH(
 
     const { data: updated, error } = await getSupabaseAdmin()
       .from('bookings')
-      .update({ status })
+      .update({ status, ...(admin_notes !== undefined ? { admin_notes } : {}) })
       .eq('id', id)
       .select()
       .single()

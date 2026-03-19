@@ -388,286 +388,313 @@ function BookingDrawer({
     new Date(d + 'T00:00:00').toLocaleDateString('it-IT', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     })
-
   const fmtPrice = (p: number) =>
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(p)
 
-  const confirmMsg =
-    `Ciao ${booking.guest_name}! 👋\n\n` +
-    `Siamo lieti di confermare la tua prenotazione presso Le Limonaie 🍋\n\n` +
-    `📍 Camera: ${roomName}\n` +
-    `📅 Check-in: ${fmtLong(booking.check_in)} dalle ore 15:00\n` +
-    `📅 Check-out: ${fmtLong(booking.check_out)} entro le ore 11:00\n` +
-    `🌙 Durata: ${nights} nott${nights === 1 ? 'e' : 'i'}\n` +
-    `💶 Totale: ${fmtPrice(booking.total_price)}\n\n` +
-    `Ti aspettiamo! Per qualsiasi info siamo qui:\n` +
-    `📞 +39 339 59 66 527\n\n` +
-    `— Lo staff di Le Limonaie`
+  const buildMsg = (type: 'confirm' | 'cancel') =>
+    type === 'confirm'
+      ? `Ciao ${booking.guest_name}! 👋\n\nSiamo lieti di confermare la tua prenotazione presso Le Limonaie 🍋\n\n📍 Camera: ${roomName}\n📅 Check-in: ${fmtLong(booking.check_in)} dalle ore 15:00\n📅 Check-out: ${fmtLong(booking.check_out)} entro le ore 11:00\n🌙 Durata: ${nights} nott${nights === 1 ? 'e' : 'i'}\n💶 Totale: ${fmtPrice(booking.total_price)}\n\nTi aspettiamo! Per qualsiasi info:\n📞 +39 339 59 66 527\n\n— Lo staff di Le Limonaie`
+      : `Ciao ${booking.guest_name},\n\nSiamo spiacenti di comunicarti che la prenotazione per ${roomName} dal ${fmtLong(booking.check_in)} al ${fmtLong(booking.check_out)} non è purtroppo disponibile.\n\nContattaci per trovare un'alternativa:\n📞 +39 339 59 66 527\n\n— Lo staff di Le Limonaie`
 
-  const cancelMsg =
-    `Ciao ${booking.guest_name},\n\n` +
-    `Siamo spiacenti di comunicarti che la prenotazione per ${roomName} ` +
-    `dal ${fmtLong(booking.check_in)} al ${fmtLong(booking.check_out)} ` +
-    `non è purtroppo disponibile.\n\n` +
-    `Ti invitiamo a contattarci per trovare una soluzione alternativa:\n` +
-    `📞 +39 339 59 66 527\n` +
-    `✉️ info@lelimonaieamare.it\n\n` +
-    `— Lo staff di Le Limonaie`
-
+  type Tab = 'dettagli' | 'comunicazione' | 'note'
+  const [tab, setTab] = useState<Tab>('dettagli')
   const [msgType, setMsgType] = useState<'confirm' | 'cancel'>('confirm')
-  const [message, setMessage] = useState(confirmMsg)
+  const [message, setMessage] = useState(() => buildMsg('confirm'))
   const [copied, setCopied] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [adminNotes, setAdminNotes] = useState((booking as any).admin_notes || '')
+  const [notesSaved, setNotesSaved] = useState(false)
+  const [actionDone, setActionDone] = useState<'confirmed' | 'cancelled' | null>(null)
 
   useEffect(() => {
-    setMessage(msgType === 'confirm' ? confirmMsg : cancelMsg)
-    setSent(false)
+    setMessage(buildMsg(msgType))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgType])
 
   const phoneClean = booking.guest_phone.replace(/\D/g, '')
   const waLink = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`
 
-  const copyMessage = async () => {
+  const copyMsg = async () => {
     await navigator.clipboard.writeText(message)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const sendEmail = async () => {
-    setSending(true)
-    try {
-      const subject = msgType === 'confirm'
-        ? '✅ Prenotazione confermata — Le Limonaie'
-        : 'Prenotazione — Le Limonaie'
-      const res = await fetch('/api/admin/bookings/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          guest_email: booking.guest_email,
-          guest_name: booking.guest_name,
-          subject,
-          message,
-        }),
-      })
-      if (res.ok) {
-        setSent(true)
-        setTimeout(() => setSent(false), 4000)
-      } else {
-        alert('Invio fallito. Controlla Resend.')
-      }
-    } finally {
-      setSending(false)
-    }
+  const saveNotes = async () => {
+    await fetch(`/api/bookings/${booking.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_notes: adminNotes }),
+    })
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2500)
   }
+
+  const handleAction = (action: 'confirmed' | 'cancelled') => {
+    if (action === 'cancelled' && !confirm(`Cancellare la prenotazione di ${booking.guest_name}?`)) return
+    onUpdate(booking.id, action)
+    setActionDone(action)
+    setMsgType(action === 'confirmed' ? 'confirm' : 'cancel')
+    setMessage(buildMsg(action === 'confirmed' ? 'confirm' : 'cancel'))
+    setTab('comunicazione')
+  }
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'dettagli', label: '📋 Dettagli' },
+    { key: 'comunicazione', label: '💬 Comunica' },
+    { key: 'note', label: '📝 Note' },
+  ]
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)',
-          zIndex: 40, backdropFilter: 'blur(2px)',
-        }}
-      />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)', zIndex: 40, backdropFilter: 'blur(2px)' }} />
 
-      {/* Drawer */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: '100%', maxWidth: '500px',
         backgroundColor: '#fff', zIndex: 50,
-        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        display: 'flex', flexDirection: 'column',
         boxShadow: '-4px 0 32px rgba(0,0,0,0.15)',
       }}>
         {/* Header */}
-        <div style={{
-          padding: '1.25rem 1.5rem',
-          borderBottom: '1px solid #e8e4dc',
-          backgroundColor: '#2D4A3E',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0,
-        }}>
+        <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#2D4A3E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#FDF8F0' }}>{booking.guest_name}</div>
             <div style={{ fontSize: '0.8rem', color: 'rgba(253,248,240,0.65)', marginTop: '0.15rem' }}>
-              {roomName} · {nights} nott{nights === 1 ? 'e' : 'i'}
+              {roomName} · {nights} nott{nights === 1 ? 'e' : 'i'} ·{' '}
+              {(() => {
+                const s = STATUS_LABELS[booking.status] || STATUS_LABELS.pending
+                return <span style={{ color: s.color === '#166534' ? '#86efac' : s.color === '#92610a' ? '#fde68a' : 'rgba(253,248,240,0.5)' }}>{s.label}</span>
+              })()}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(253,248,240,0.7)', fontSize: '1.75rem', lineHeight: 1, padding: '0 0.25rem' }}
-          >
-            ×
-          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(253,248,240,0.7)', fontSize: '1.75rem', lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Post-action banner */}
+        {actionDone && (
+          <div style={{
+            padding: '0.875rem 1.5rem', flexShrink: 0,
+            backgroundColor: actionDone === 'confirmed' ? '#dcfce7' : '#fef2ee',
+            borderBottom: '1px solid', borderColor: actionDone === 'confirmed' ? '#bbf7d0' : '#f0c0b0',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <span style={{ fontSize: '1rem' }}>{actionDone === 'confirmed' ? '✅' : '❌'}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: actionDone === 'confirmed' ? '#166534' : '#C4603C' }}>
+                {actionDone === 'confirmed' ? 'Prenotazione confermata!' : 'Prenotazione rifiutata'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#6B6B5A' }}>
+                Ora invia il messaggio WhatsApp all&apos;ospite →
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #e8e4dc', backgroundColor: '#F5F4F0', flexShrink: 0 }}>
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              style={{
+                flex: 1, padding: '0.75rem 0.5rem',
+                background: 'none', border: 'none',
+                borderBottom: tab === t.key ? '2px solid #C4603C' : '2px solid transparent',
+                color: tab === t.key ? '#C4603C' : '#6B6B5A',
+                fontWeight: tab === t.key ? 700 : 400,
+                fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* Body */}
-        <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
 
-          {/* Status badge */}
-          <div style={{ marginBottom: '1.25rem' }}>
-            {(() => {
-              const s = STATUS_LABELS[booking.status] || STATUS_LABELS.pending
-              return (
-                <span style={{ display: 'inline-block', padding: '0.3rem 0.875rem', backgroundColor: s.bg, color: s.color, borderRadius: '9999px', fontSize: '0.82rem', fontWeight: 700 }}>
-                  {s.label}
-                </span>
-              )
-            })()}
-          </div>
-
-          {/* Detail grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-            <DetailItem label="Check-in" value={`${fmtLong(booking.check_in)}\ndalle ore 15:00`} />
-            <DetailItem label="Check-out" value={`${fmtLong(booking.check_out)}\nentro le ore 11:00`} />
-            <DetailItem label="Email" value={booking.guest_email} href={`mailto:${booking.guest_email}`} />
-            <DetailItem label="Telefono" value={booking.guest_phone} href={`tel:${booking.guest_phone}`} />
-            <DetailItem label="Totale" value={fmtPrice(booking.total_price)} accent />
-            <DetailItem label="Notti" value={String(nights)} />
-            {booking.notes && (
-              <div style={{ gridColumn: 'span 2' }}>
-                <DetailItem label="Note ospite" value={booking.notes} />
+          {/* TAB: DETTAGLI */}
+          {tab === 'dettagli' && (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <DetailItem label="Check-in" value={`${fmtLong(booking.check_in)}\ndalle ore 15:00`} />
+                <DetailItem label="Check-out" value={`${fmtLong(booking.check_out)}\nentro le ore 11:00`} />
+                <DetailItem label="Telefono" value={booking.guest_phone} href={`tel:${booking.guest_phone}`} />
+                <DetailItem label="Email" value={booking.guest_email} href={`mailto:${booking.guest_email}`} />
+                <DetailItem label="Totale" value={fmtPrice(booking.total_price)} accent />
+                <DetailItem label="Notti" value={`${nights} nott${nights === 1 ? 'e' : 'i'}`} />
+                {booking.notes && (
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <DetailItem label="Note dell'ospite" value={booking.notes} />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Message section */}
-          <div style={{ backgroundColor: '#F5F4F0', borderRadius: '0.875rem', padding: '1.25rem' }}>
-            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#9B9B8A', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>
-              Messaggio da inviare
-            </p>
-
-            {/* Toggle */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem' }}>
-              <button
-                onClick={() => setMsgType('confirm')}
-                style={{
-                  flex: 1, padding: '0.45rem 0.5rem',
-                  backgroundColor: msgType === 'confirm' ? '#dcfce7' : '#fff',
-                  color: msgType === 'confirm' ? '#166534' : '#6B6B5A',
-                  border: '1px solid', borderColor: msgType === 'confirm' ? '#bbf7d0' : '#e0dbd0',
-                  borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  transition: 'all 0.15s',
-                }}
-              >
-                ✅ Conferma
-              </button>
-              <button
-                onClick={() => setMsgType('cancel')}
-                style={{
-                  flex: 1, padding: '0.45rem 0.5rem',
-                  backgroundColor: msgType === 'cancel' ? '#fef2ee' : '#fff',
-                  color: msgType === 'cancel' ? '#C4603C' : '#6B6B5A',
-                  border: '1px solid', borderColor: msgType === 'cancel' ? '#f0c0b0' : '#e0dbd0',
-                  borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  transition: 'all 0.15s',
-                }}
-              >
-                ❌ Cancellazione
-              </button>
+              {/* Quick contact */}
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <a
+                  href={`tel:${booking.guest_phone}`}
+                  style={{ flex: 1, padding: '0.75rem', backgroundColor: '#f0f7f4', color: '#2D4A3E', borderRadius: '0.75rem', textDecoration: 'none', fontWeight: 700, fontSize: '0.9rem', textAlign: 'center' }}
+                >
+                  📞 Chiama
+                </a>
+                <a
+                  href={`https://wa.me/${phoneClean}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ flex: 1, padding: '0.75rem', backgroundColor: '#25D366', color: '#fff', borderRadius: '0.75rem', textDecoration: 'none', fontWeight: 700, fontSize: '0.9rem', textAlign: 'center' }}
+                >
+                  💬 WhatsApp
+                </a>
+              </div>
             </div>
+          )}
 
-            {/* Editable message */}
-            <textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              rows={11}
-              style={{
-                width: '100%', padding: '0.875rem',
-                border: '1px solid #e0dbd0', borderRadius: '0.625rem',
-                fontSize: '0.85rem', lineHeight: 1.65, resize: 'vertical',
-                fontFamily: 'inherit', backgroundColor: '#fff', color: '#1A1A1A',
-                boxSizing: 'border-box',
-              }}
-            />
+          {/* TAB: COMUNICAZIONE */}
+          {tab === 'comunicazione' && (
+            <div>
+              {actionDone && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem', color: '#92610a' }}>
+                  💡 Messaggio pre-compilato con la risposta. Modifica se necessario, poi invia su WhatsApp.
+                </div>
+              )}
 
-            {/* Message actions */}
-            <div style={{ display: 'flex', gap: '0.625rem', marginTop: '0.75rem' }}>
-              <button
-                onClick={copyMessage}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                <button
+                  onClick={() => setMsgType('confirm')}
+                  style={{
+                    flex: 1, padding: '0.45rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                    backgroundColor: msgType === 'confirm' ? '#dcfce7' : '#fff',
+                    color: msgType === 'confirm' ? '#166534' : '#6B6B5A',
+                    border: '1px solid', borderColor: msgType === 'confirm' ? '#bbf7d0' : '#e0dbd0',
+                    borderRadius: '0.5rem', transition: 'all 0.15s',
+                  }}
+                >✅ Conferma</button>
+                <button
+                  onClick={() => setMsgType('cancel')}
+                  style={{
+                    flex: 1, padding: '0.45rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                    backgroundColor: msgType === 'cancel' ? '#fef2ee' : '#fff',
+                    color: msgType === 'cancel' ? '#C4603C' : '#6B6B5A',
+                    border: '1px solid', borderColor: msgType === 'cancel' ? '#f0c0b0' : '#e0dbd0',
+                    borderRadius: '0.5rem', transition: 'all 0.15s',
+                  }}
+                >❌ Rifiuto</button>
+              </div>
+
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                rows={11}
                 style={{
-                  flex: 1, padding: '0.65rem 0.5rem',
-                  backgroundColor: copied ? '#dcfce7' : '#fff',
-                  color: copied ? '#166534' : '#1A1A1A',
-                  border: '1px solid', borderColor: copied ? '#bbf7d0' : '#e0dbd0',
-                  borderRadius: '0.625rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                  width: '100%', padding: '0.875rem', marginBottom: '0.75rem',
+                  border: '1px solid #e0dbd0', borderRadius: '0.625rem',
+                  fontSize: '0.85rem', lineHeight: 1.65, resize: 'vertical',
+                  fontFamily: 'inherit', backgroundColor: '#fff', color: '#1A1A1A',
+                  boxSizing: 'border-box',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '0.625rem' }}>
+                <button
+                  onClick={copyMsg}
+                  style={{
+                    flex: 1, padding: '0.75rem',
+                    backgroundColor: copied ? '#dcfce7' : '#F5F4F0',
+                    color: copied ? '#166534' : '#1A1A1A',
+                    border: '1px solid #e0dbd0', borderRadius: '0.75rem',
+                    cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, transition: 'all 0.2s',
+                  }}
+                >
+                  {copied ? '✓ Copiato!' : '📋 Copia testo'}
+                </button>
+                <a
+                  href={waLink}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    flex: 2, padding: '0.75rem',
+                    backgroundColor: actionDone ? '#128C7E' : '#25D366', color: '#fff',
+                    borderRadius: '0.75rem', textDecoration: 'none',
+                    fontWeight: 700, fontSize: '0.95rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                    boxShadow: actionDone ? '0 0 0 3px rgba(37,211,102,0.35)' : 'none',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  💬 Invia su WhatsApp
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: NOTE INTERNE */}
+          {tab === 'note' && (
+            <div>
+              <p style={{ fontSize: '0.82rem', color: '#9B9B8A', margin: '0 0 0.875rem' }}>
+                Note visibili solo a te — log chiamate, WhatsApp inviati, accordi presi, ecc.
+              </p>
+              <textarea
+                value={adminNotes}
+                onChange={e => setAdminNotes(e.target.value)}
+                rows={14}
+                placeholder={`Es:\n• 12/06 — WhatsApp di conferma inviato\n• 13/06 — Cliente chiede check-in anticipato, ok dalle 13\n• Pagamento: bonifico ricevuto`}
+                style={{
+                  width: '100%', padding: '0.875rem', marginBottom: '0.75rem',
+                  border: '1px solid #e0dbd0', borderRadius: '0.625rem',
+                  fontSize: '0.85rem', lineHeight: 1.7, resize: 'vertical',
+                  fontFamily: 'inherit', backgroundColor: '#fff', color: '#1A1A1A',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <button
+                onClick={saveNotes}
+                style={{
+                  width: '100%', padding: '0.8rem',
+                  backgroundColor: notesSaved ? '#dcfce7' : '#2D4A3E',
+                  color: notesSaved ? '#166534' : '#fff',
+                  border: 'none', borderRadius: '0.75rem',
+                  cursor: 'pointer', fontWeight: 700, fontSize: '0.95rem',
                   transition: 'all 0.2s',
                 }}
               >
-                {copied ? '✓ Copiato!' : '📋 Copia'}
-              </button>
-              <a
-                href={waLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  flex: 1, padding: '0.65rem 0.5rem',
-                  backgroundColor: '#25D366', color: '#fff',
-                  borderRadius: '0.625rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
-                  textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                }}
-              >
-                💬 WhatsApp
-              </a>
-              <button
-                onClick={sendEmail}
-                disabled={sending}
-                style={{
-                  flex: 1, padding: '0.65rem 0.5rem',
-                  backgroundColor: sent ? '#dcfce7' : '#EFF6FF',
-                  color: sent ? '#166534' : '#1d4ed8',
-                  border: 'none',
-                  borderRadius: '0.625rem', cursor: sending ? 'wait' : 'pointer', fontSize: '0.85rem', fontWeight: 700,
-                  transition: 'all 0.2s',
-                }}
-              >
-                {sent ? '✓ Inviata!' : sending ? '...' : '✉️ Invia'}
+                {notesSaved ? '✓ Salvato!' : 'Salva note'}
               </button>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Footer actions */}
-        <div style={{
-          padding: '1.25rem 1.5rem', borderTop: '1px solid #e8e4dc',
-          backgroundColor: '#F5F4F0', display: 'flex', gap: '0.75rem', flexShrink: 0,
-        }}>
-          {booking.status !== 'confirmed' && booking.status !== 'cancelled' && (
+        {/* Footer — only show action buttons in dettagli tab or when pending */}
+        {booking.status === 'pending' && tab === 'dettagli' && (
+          <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid #e8e4dc', backgroundColor: '#F5F4F0', display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
             <button
-              onClick={() => onUpdate(booking.id, 'confirmed')}
+              onClick={() => handleAction('confirmed')}
               disabled={updatingId === booking.id}
-              style={{
-                flex: 1, padding: '0.8rem',
-                backgroundColor: '#166534', color: '#fff',
-                border: 'none', borderRadius: '0.75rem',
-                cursor: 'pointer', fontSize: '0.95rem', fontWeight: 700,
-              }}
+              style={{ flex: 1, padding: '0.8rem', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 700 }}
             >
-              ✅ Conferma prenotazione
+              ✅ Conferma
             </button>
-          )}
-          {booking.status === 'confirmed' && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#dcfce7', borderRadius: '0.75rem', padding: '0.8rem 1rem' }}>
-              <span style={{ color: '#166534', fontWeight: 700, fontSize: '0.9rem' }}>✅ Prenotazione confermata</span>
-            </div>
-          )}
-          {booking.status !== 'cancelled' && (
             <button
-              onClick={() => { if (confirm(`Cancellare la prenotazione di ${booking.guest_name}?`)) onUpdate(booking.id, 'cancelled') }}
+              onClick={() => handleAction('cancelled')}
               disabled={updatingId === booking.id}
-              style={{
-                padding: '0.8rem 1.25rem',
-                backgroundColor: '#fef2ee', color: '#C4603C',
-                border: '1px solid #f0c0b0', borderRadius: '0.75rem',
-                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
-              }}
+              style={{ padding: '0.8rem 1.25rem', backgroundColor: '#fef2ee', color: '#C4603C', border: '1px solid #f0c0b0', borderRadius: '0.75rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}
+            >
+              Rifiuta
+            </button>
+          </div>
+        )}
+        {booking.status === 'confirmed' && tab === 'dettagli' && (
+          <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid #e8e4dc', backgroundColor: '#F5F4F0', display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
+            <div style={{ flex: 1, backgroundColor: '#dcfce7', borderRadius: '0.75rem', padding: '0.8rem 1rem', display: 'flex', alignItems: 'center' }}>
+              <span style={{ color: '#166534', fontWeight: 700, fontSize: '0.9rem' }}>✅ Confermata</span>
+            </div>
+            <button
+              onClick={() => handleAction('cancelled')}
+              disabled={updatingId === booking.id}
+              style={{ padding: '0.8rem 1.25rem', backgroundColor: '#fef2ee', color: '#C4603C', border: '1px solid #f0c0b0', borderRadius: '0.75rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
             >
               Cancella
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </>
   )
