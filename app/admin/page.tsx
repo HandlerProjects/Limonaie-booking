@@ -15,6 +15,36 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: 'Cancellata', color: '#6B6B5A', bg: '#f1f0ec' },
 }
 
+const ROOM_DOTS: Record<string, string> = {
+  limoni:    '#D4A017',
+  papaveri:  '#C4603C',
+  rose:      '#E8829A',
+  country:   '#4A7C59',
+}
+
+function getRoomDotColor(name: string): string {
+  const key = name.toLowerCase().replace(/\s+/g, '')
+  for (const k of Object.keys(ROOM_DOTS)) {
+    if (key.includes(k)) return ROOM_DOTS[k]
+  }
+  return '#9B9B8A'
+}
+
+const ITALIAN_MONTHS_SHORT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
+function getAvatarColor(name: string): string {
+  const colors = ['#C4603C', '#2D4A3E', '#4A7C59', '#92610a', '#6B4E71', '#1e5f8a', '#8a3a1e']
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i)
+  return colors[hash % colors.length]
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -24,6 +54,7 @@ export default function AdminPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [newAlert, setNewAlert] = useState(false)
+  const [search, setSearch] = useState('')
 
   const loadBookings = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -94,7 +125,66 @@ export default function AdminPage() {
       : 'Admin — Le Limonaie'
   }, [pendingCount])
 
-  const filteredBookings = bookings.filter(b => {
+  // Stats
+  const now = new Date()
+  const activeCount = bookings.filter(b => b.status !== 'cancelled').length
+  const confirmedRevenue = bookings
+    .filter(b => b.status === 'confirmed')
+    .reduce((sum, b) => sum + b.total_price, 0)
+  const monthRevenue = bookings
+    .filter(b => {
+      if (b.status !== 'confirmed') return false
+      const d = new Date(b.check_in + 'T00:00:00')
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    })
+    .reduce((sum, b) => sum + b.total_price, 0)
+
+  // Revenue bar chart — last 6 months (confirmed bookings grouped by check_in month)
+  const revenueByMonth: { label: string; value: number; isCurrent: boolean }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const m = d.getMonth()
+    const y = d.getFullYear()
+    const value = bookings
+      .filter(b => {
+        if (b.status !== 'confirmed') return false
+        const bd = new Date(b.check_in + 'T00:00:00')
+        return bd.getMonth() === m && bd.getFullYear() === y
+      })
+      .reduce((sum, b) => sum + b.total_price, 0)
+    revenueByMonth.push({
+      label: ITALIAN_MONTHS_SHORT[m],
+      value,
+      isCurrent: i === 0,
+    })
+  }
+  const maxVal = Math.max(...revenueByMonth.map(r => r.value), 1)
+
+  // Most booked room
+  const roomCounts: Record<string, number> = {}
+  bookings.forEach(b => {
+    if (b.status === 'cancelled') return
+    const name = (b.rooms as any)?.name || 'Sconosciuta'
+    roomCounts[name] = (roomCounts[name] || 0) + 1
+  })
+  const mostBooked = Object.entries(roomCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+
+  // Average nights (non-cancelled)
+  const nightsList = bookings
+    .filter(b => b.status !== 'cancelled')
+    .map(b => Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000))
+  const avgNights = nightsList.length > 0
+    ? (nightsList.reduce((a, n) => a + n, 0) / nightsList.length).toFixed(1)
+    : '—'
+
+  const fmtPrice = (p: number) =>
+    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(p)
+
+  const fmt = (d: string) =>
+    new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
+
+  // Filter by tab, then by search
+  const tabFilteredBookings = bookings.filter(b => {
     if (activeFilter === 'tutte') return b.status !== 'cancelled'
     if (activeFilter === 'cancellate') return b.status === 'cancelled'
     if (activeFilter === 'arrivo') return b.check_in >= today && b.status !== 'cancelled'
@@ -102,23 +192,18 @@ export default function AdminPage() {
     return true
   })
 
-  const stats = {
-    total: bookings.filter(b => b.status !== 'cancelled').length,
-    thisMonth: bookings.filter(b => {
-      const d = new Date(b.check_in)
-      const now = new Date()
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && b.status !== 'cancelled'
-    }).length,
-    nextCheckIn: bookings
-      .filter(b => b.check_in >= today && b.status !== 'cancelled')
-      .sort((a, b) => a.check_in.localeCompare(b.check_in))[0]?.check_in || null,
-  }
-
-  const fmt = (d: string) =>
-    new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
-
-  const fmtPrice = (p: number) =>
-    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(p)
+  const searchLower = search.toLowerCase().trim()
+  const filteredBookings = searchLower
+    ? tabFilteredBookings.filter(b => {
+        const roomName = ((b.rooms as any)?.name || '').toLowerCase()
+        return (
+          b.guest_name.toLowerCase().includes(searchLower) ||
+          b.guest_email.toLowerCase().includes(searchLower) ||
+          b.guest_phone.toLowerCase().includes(searchLower) ||
+          roomName.includes(searchLower)
+        )
+      })
+    : tabFilteredBookings
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F4F0' }}>
@@ -162,15 +247,84 @@ export default function AdminPage() {
       </header>
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-          <StatCard label="Totale prenotazioni" value={String(stats.total)} icon="📋" />
-          <StatCard label="Questo mese" value={String(stats.thisMonth)} icon="📅" />
-          <StatCard label="Prossimo check-in" value={stats.nextCheckIn ? fmt(stats.nextCheckIn) : '—'} icon="🏨" />
+
+        {/* Stats — 2x2 on mobile, 4 columns on desktop */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+          <StatCard
+            label="Prenotazioni attive"
+            value={String(activeCount)}
+            icon="📋"
+          />
+          <StatCard
+            label="In attesa"
+            value={String(pendingCount)}
+            icon="⏳"
+            highlight={pendingCount > 0 ? 'amber' : undefined}
+          />
+          <StatCard
+            label="Ricavi confermati"
+            value={fmtPrice(confirmedRevenue)}
+            icon="💶"
+            small
+          />
+          <StatCard
+            label="Ricavi questo mese"
+            value={fmtPrice(monthRevenue)}
+            icon="📅"
+            small
+          />
+        </div>
+
+        {/* Revenue bar chart */}
+        <div style={{ backgroundColor: '#fff', borderRadius: '1rem', border: '1px solid #e8e4dc', padding: '1.5rem', marginBottom: '1.75rem', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          {/* Chart header */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1A1A1A', marginBottom: '0.25rem' }}>
+                Ricavi ultimi 6 mesi
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#9B9B8A' }}>Solo prenotazioni confermate</div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#F5F4F0', borderRadius: '9999px', padding: '0.3rem 0.75rem', fontSize: '0.78rem', color: '#6B6B5A', fontWeight: 600 }}>
+                🏠 {mostBooked}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#F5F4F0', borderRadius: '9999px', padding: '0.3rem 0.75rem', fontSize: '0.78rem', color: '#6B6B5A', fontWeight: 600 }}>
+                🌙 {avgNights} notti medie
+              </span>
+            </div>
+          </div>
+
+          {/* Bars */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', height: '90px' }}>
+            {revenueByMonth.map((month, i) => {
+              const barH = Math.max(2, Math.round((month.value / maxVal) * 70))
+              return (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '90px', gap: '4px' }}>
+                  {/* Value label above bar */}
+                  <div style={{ fontSize: '0.65rem', color: month.isCurrent ? '#C4603C' : '#9B9B8A', fontWeight: 600, minHeight: '14px', textAlign: 'center' }}>
+                    {month.value > 0 ? fmtPrice(month.value).replace('€\u00a0', '€').replace(',00', '') : ''}
+                  </div>
+                  {/* Bar */}
+                  <div style={{
+                    width: '100%',
+                    height: `${barH}px`,
+                    backgroundColor: month.isCurrent ? '#C4603C' : '#e8e4dc',
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 0.3s ease',
+                  }} />
+                  {/* Month label below */}
+                  <div style={{ fontSize: '0.72rem', color: month.isCurrent ? '#C4603C' : '#9B9B8A', fontWeight: month.isCurrent ? 700 : 400, marginTop: '2px' }}>
+                    {month.label}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* View toggle */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e8e4dc', marginRight: '1rem' }}>
             {[{ key: 'lista', label: '☰ Lista' }, { key: 'calendario', label: '📅 Calendario' }].map(v => (
               <button
@@ -225,6 +379,45 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* Search bar — only in lista view */}
+        {activeView === 'lista' && (
+          <div style={{ marginBottom: '1rem', position: 'relative' }}>
+            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', color: '#9B9B8A', pointerEvents: 'none' }}>
+              🔍
+            </span>
+            <input
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cerca per ospite, email, telefono, camera..."
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem 0.75rem 2.75rem',
+                backgroundColor: '#fff',
+                border: '1px solid #e8e4dc',
+                borderRadius: '0.75rem',
+                fontSize: '0.9rem',
+                color: '#1A1A1A',
+                outline: 'none',
+                boxSizing: 'border-box',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#C4603C' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#e8e4dc' }}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9B9B8A', fontSize: '1.1rem', lineHeight: 1, padding: '0.25rem' }}
+                title="Cancella ricerca"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+
         {/* CALENDARIO VIEW */}
         {activeView === 'calendario' && (
           <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
@@ -242,12 +435,14 @@ export default function AdminPage() {
             {loading ? (
               <div style={{ padding: '4rem', textAlign: 'center', color: '#9B9B8A' }}>Caricamento prenotazioni...</div>
             ) : filteredBookings.length === 0 ? (
-              <div style={{ padding: '4rem', textAlign: 'center', color: '#9B9B8A' }}>Nessuna prenotazione trovata.</div>
+              <div style={{ padding: '4rem', textAlign: 'center', color: '#9B9B8A' }}>
+                {search ? `Nessun risultato per "${search}".` : 'Nessuna prenotazione trovata.'}
+              </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F5F4F0', borderBottom: '1px solid #e8e4dc' }}>
-                    {['Arrivo', 'Partenza', 'Camera', 'Ospite', 'Telefono', 'Totale', 'Stato', 'Azioni'].map(col => (
+                    {['Ospite', 'Camera', 'Date', 'Notti', 'Totale', 'Stato', 'Azioni'].map(col => (
                       <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#9B9B8A', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                         {col}
                       </th>
@@ -262,6 +457,12 @@ export default function AdminPage() {
                     const isPast = booking.check_out < today
                     const isToday = booking.check_in === today
                     const isSelected = selectedBooking?.id === booking.id
+                    const nights = Math.round(
+                      (new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / 86400000
+                    )
+                    const dotColor = getRoomDotColor(roomName)
+                    const initials = getInitials(booking.guest_name)
+                    const avatarColor = getAvatarColor(booking.guest_name)
 
                     return (
                       <tr
@@ -269,7 +470,7 @@ export default function AdminPage() {
                         onClick={() => setSelectedBooking(booking)}
                         style={{
                           borderBottom: idx < filteredBookings.length - 1 ? '1px solid #f0ece4' : 'none',
-                          opacity: isCancelled ? 0.5 : 1,
+                          opacity: isCancelled ? 0.55 : 1,
                           backgroundColor: isSelected ? '#fef3e8' : isToday ? '#fef8f0' : isPast && !isCancelled ? '#fafaf8' : '#fff',
                           textDecoration: isCancelled ? 'line-through' : 'none',
                           cursor: 'pointer',
@@ -278,41 +479,62 @@ export default function AdminPage() {
                         onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f9f6f0' }}
                         onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = isToday ? '#fef8f0' : isPast && !isCancelled ? '#fafaf8' : '#fff' }}
                       >
+                        {/* Ospite — avatar + name + email */}
                         <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
-                          <span className="font-mono-custom" style={{ fontSize: '0.85rem', color: isToday ? '#C4603C' : '#1A1A1A', fontWeight: isToday ? 700 : 400 }}>
-                            {fmt(booking.check_in)}
-                            {isToday && <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem' }}>TODAY</span>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                            <div style={{
+                              width: '36px', height: '36px', borderRadius: '50%',
+                              backgroundColor: avatarColor, color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, letterSpacing: '0.02em',
+                            }}>
+                              {initials}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#1A1A1A' }}>{booking.guest_name}</div>
+                              <div style={{ fontSize: '0.73rem', color: '#9B9B8A', marginTop: '1px' }}>{booking.guest_email}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Camera — colored dot + name */}
+                        <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dotColor, flexShrink: 0, display: 'inline-block' }} />
+                            <span style={{ fontSize: '0.85rem', color: '#1A1A1A', fontWeight: 500 }}>{roomName}</span>
+                          </div>
+                        </td>
+
+                        {/* Date */}
+                        <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: '0.82rem', color: isToday ? '#C4603C' : '#1A1A1A', fontWeight: isToday ? 700 : 400 }}>
+                            {fmt(booking.check_in)}{isToday && <span style={{ marginLeft: '0.35rem', fontSize: '0.65rem', backgroundColor: '#C4603C', color: '#fff', borderRadius: '3px', padding: '1px 4px', fontWeight: 700 }}>OGGI</span>}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#9B9B8A', marginTop: '1px' }}>→ {fmt(booking.check_out)}</div>
+                        </td>
+
+                        {/* Notti badge */}
+                        <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', backgroundColor: '#F5F4F0', color: '#6B6B5A', borderRadius: '9999px', padding: '0.2rem 0.625rem', fontSize: '0.78rem', fontWeight: 600 }}>
+                            🌙 {nights}
                           </span>
                         </td>
+
+                        {/* Totale */}
                         <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
-                          <span className="font-mono-custom" style={{ fontSize: '0.85rem', color: '#1A1A1A' }}>{fmt(booking.check_out)}</span>
-                        </td>
-                        <td style={{ padding: '0.875rem 1rem' }}>
-                          <span style={{ fontSize: '0.85rem', color: '#1A1A1A', fontWeight: 500 }}>{roomName}</span>
-                        </td>
-                        <td style={{ padding: '0.875rem 1rem' }}>
-                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1A1A1A' }}>{booking.guest_name}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#9B9B8A' }}>{booking.guest_email}</div>
-                        </td>
-                        <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
-                          <a
-                            href={`tel:${booking.guest_phone}`}
-                            onClick={e => e.stopPropagation()}
-                            style={{ fontSize: '0.85rem', color: '#2D4A3E', textDecoration: 'none' }}
-                          >
-                            {booking.guest_phone}
-                          </a>
-                        </td>
-                        <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
-                          <span className="font-mono-custom" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#C4603C' }}>
+                          <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#C4603C' }}>
                             {fmtPrice(booking.total_price)}
                           </span>
                         </td>
+
+                        {/* Stato */}
                         <td style={{ padding: '0.875rem 1rem' }}>
                           <span style={{ display: 'inline-block', padding: '0.25rem 0.625rem', backgroundColor: statusInfo.bg, color: statusInfo.color, borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
                             {statusInfo.label}
                           </span>
                         </td>
+
+                        {/* Azioni */}
                         <td style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
                             {booking.status !== 'confirmed' && booking.status !== 'cancelled' && (
@@ -351,7 +573,7 @@ export default function AdminPage() {
         )}
 
         <p style={{ textAlign: 'center', color: '#9B9B8A', fontSize: '0.8rem', marginTop: '2rem' }}>
-          {activeView === 'lista' && `${filteredBookings.length} prenotazion${filteredBookings.length === 1 ? 'e' : 'i'} mostrat${filteredBookings.length === 1 ? 'a' : 'e'} · Clicca su una riga per i dettagli`}
+          {activeView === 'lista' && `${filteredBookings.length} prenotazion${filteredBookings.length === 1 ? 'e' : 'i'} mostrat${filteredBookings.length === 1 ? 'a' : 'e'}${search ? ` per "${search}"` : ''} · Clicca su una riga per i dettagli`}
         </p>
       </main>
 
@@ -731,12 +953,35 @@ function DetailItem({
   )
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+function StatCard({
+  label, value, icon, highlight, small,
+}: {
+  label: string
+  value: string
+  icon: string
+  highlight?: 'amber'
+  small?: boolean
+}) {
+  const isAmber = highlight === 'amber'
   return (
-    <div style={{ backgroundColor: '#fff', borderRadius: '0.875rem', padding: '1.25rem 1.5rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{icon}</div>
-      <div className="font-mono-custom" style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1A1A1A', marginBottom: '0.25rem' }}>{value}</div>
-      <div style={{ fontSize: '0.8rem', color: '#9B9B8A' }}>{label}</div>
+    <div style={{
+      backgroundColor: isAmber ? '#fffbeb' : '#fff',
+      borderRadius: '0.875rem',
+      padding: '1.25rem 1.5rem',
+      border: `1px solid ${isAmber ? '#fde68a' : '#e8e4dc'}`,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+    }}>
+      <div style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>{icon}</div>
+      <div className="font-mono-custom" style={{
+        fontSize: small ? '1.25rem' : '1.75rem',
+        fontWeight: 700,
+        color: isAmber ? '#92610a' : '#1A1A1A',
+        marginBottom: '0.25rem',
+        lineHeight: 1.2,
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: '0.78rem', color: isAmber ? '#92610a' : '#9B9B8A', fontWeight: isAmber ? 600 : 400 }}>{label}</div>
     </div>
   )
 }
