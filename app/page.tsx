@@ -141,17 +141,20 @@ export default function HomePage() {
               display: 'flex',
               flexDirection: 'column',
             }}>
-              {/* Image placeholder */}
-              <div style={{
-                height: '220px',
-                background: 'linear-gradient(135deg, #2D4A3E, #4A7A6A)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexDirection: 'column', gap: '0.5rem',
-              }}>
-                <span style={{ fontSize: '3rem' }}>🏙️</span>
-                <span style={{ color: 'rgba(253,248,240,0.8)', fontSize: '0.85rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                  Centro storico
-                </span>
+              {/* Real room photo */}
+              <div style={{ height: '240px', position: 'relative', overflow: 'hidden' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://lelimonaieincentro.it/wp-content/uploads/2025/03/585397032.jpg"
+                  alt="Camera dei Papaveri — Le Limonaie in Centro"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
+                <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
+                  <span style={{ color: '#fff', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+                    Centro storico · San Benedetto del Tronto
+                  </span>
+                </div>
               </div>
 
               <div style={{ padding: '2rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -228,17 +231,20 @@ export default function HomePage() {
               display: 'flex',
               flexDirection: 'column',
             }}>
-              {/* Image placeholder */}
-              <div style={{
-                height: '220px',
-                background: 'linear-gradient(135deg, #C4603C, #C8A050)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexDirection: 'column', gap: '0.5rem',
-              }}>
-                <span style={{ fontSize: '3rem' }}>🌿</span>
-                <span style={{ color: 'rgba(253,248,240,0.85)', fontSize: '0.85rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                  Campagna & mare
-                </span>
+              {/* Real country house photo */}
+              <div style={{ height: '240px', position: 'relative', overflow: 'hidden' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://lelimonaieincentro.it/wp-content/uploads/2025/04/b-b-Country-House-min.jpg"
+                  alt="Country House Le Limonaie a Mare"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
+                <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
+                  <span style={{ color: '#fff', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+                    Campagna & mare · C.da Santa Lucia
+                  </span>
+                </div>
               </div>
 
               <div style={{ padding: '2rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
