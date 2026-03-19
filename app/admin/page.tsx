@@ -366,9 +366,12 @@ function BookingDrawer({
   const [msgType, setMsgType] = useState<'confirm' | 'cancel'>('confirm')
   const [message, setMessage] = useState(confirmMsg)
   const [copied, setCopied] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
 
   useEffect(() => {
     setMessage(msgType === 'confirm' ? confirmMsg : cancelMsg)
+    setSent(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgType])
 
@@ -379,6 +382,33 @@ function BookingDrawer({
     await navigator.clipboard.writeText(message)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
+  }
+
+  const sendEmail = async () => {
+    setSending(true)
+    try {
+      const subject = msgType === 'confirm'
+        ? '✅ Prenotazione confermata — Le Limonaie'
+        : 'Prenotazione — Le Limonaie'
+      const res = await fetch('/api/admin/bookings/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guest_email: booking.guest_email,
+          guest_name: booking.guest_name,
+          subject,
+          message,
+        }),
+      })
+      if (res.ok) {
+        setSent(true)
+        setTimeout(() => setSent(false), 4000)
+      } else {
+        alert('Invio fallito. Controlla Resend.')
+      }
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -530,17 +560,20 @@ function BookingDrawer({
               >
                 💬 WhatsApp
               </a>
-              <a
-                href={`mailto:${booking.guest_email}?subject=${encodeURIComponent(msgType === 'confirm' ? 'Conferma prenotazione — Le Limonaie' : 'Prenotazione — Le Limonaie')}&body=${encodeURIComponent(message)}`}
+              <button
+                onClick={sendEmail}
+                disabled={sending}
                 style={{
                   flex: 1, padding: '0.65rem 0.5rem',
-                  backgroundColor: '#EFF6FF', color: '#1d4ed8',
-                  borderRadius: '0.625rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
-                  textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                  backgroundColor: sent ? '#dcfce7' : '#EFF6FF',
+                  color: sent ? '#166534' : '#1d4ed8',
+                  border: 'none',
+                  borderRadius: '0.625rem', cursor: sending ? 'wait' : 'pointer', fontSize: '0.85rem', fontWeight: 700,
+                  transition: 'all 0.2s',
                 }}
               >
-                ✉️ Email
-              </a>
+                {sent ? '✓ Inviata!' : sending ? '...' : '✉️ Invia'}
+              </button>
             </div>
           </div>
         </div>
