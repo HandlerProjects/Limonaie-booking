@@ -218,7 +218,7 @@ export default function AdminPage() {
           )}
 
           <button
-            onClick={loadBookings}
+            onClick={() => loadBookings()}
             style={{ marginLeft: 'auto', padding: '0.5rem 1rem', backgroundColor: 'transparent', border: '1px solid #e0dbd0', borderRadius: '9999px', cursor: 'pointer', color: '#6B6B5A', fontSize: '0.85rem' }}
           >
             ↻ Aggiorna
