@@ -1,26 +1,39 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-cream: #FDF8F0;
+  --color-terracotta: #C4603C;
+  --color-terracotta-light: #E8845E;
+  --color-green-dark: #2D4A3E;
+  --color-green-mid: #4A7A6A;
+  --color-gold: #C8A050;
+  --color-dark: #1A1A1A;
+  --color-muted: #6B6B5A;
+  --font-display: 'Playfair Display', serif;
+  --font-mono-custom: 'IBM Plex Mono', monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #FDF8F0;
+  color: #1A1A1A;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.font-display {
+  font-family: 'Playfair Display', serif;
+}
+
+.font-mono-custom {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove date input default styling */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
 }
