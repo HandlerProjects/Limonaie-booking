@@ -23,22 +23,42 @@ export default function AdminPage() {
   const [activeView, setActiveView] = useState<ViewTab>('lista')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [newAlert, setNewAlert] = useState(false)
 
-  const loadBookings = useCallback(async () => {
-    setLoading(true)
+  const loadBookings = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const res = await fetch('/api/admin/bookings')
       if (res.status === 401) { router.push('/admin/login'); return }
       const data = await res.json()
-      setBookings(Array.isArray(data) ? data : [])
+      if (Array.isArray(data)) {
+        setBookings(prev => {
+          const prevPending = prev.filter(b => b.status === 'pending').length
+          const newPending = data.filter((b: Booking) => b.status === 'pending').length
+          if (silent && newPending > prevPending) {
+            setNewAlert(true)
+            try {
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA...') // simple beep
+              audio.volume = 0.3
+              audio.play().catch(() => {})
+            } catch {}
+          }
+          return data
+        })
+      }
     } catch {
       setBookings([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [router])
 
-  useEffect(() => { loadBookings() }, [loadBookings])
+  useEffect(() => {
+    loadBookings()
+    // Poll for new bookings every 30 seconds
+    const interval = setInterval(() => loadBookings(true), 30000)
+    return () => clearInterval(interval)
+  }, [loadBookings])
 
   async function updateStatus(id: string, status: string) {
     setUpdatingId(id)
@@ -65,6 +85,14 @@ export default function AdminPage() {
   }
 
   const today = new Date().toISOString().split('T')[0]
+  const pendingCount = bookings.filter(b => b.status === 'pending').length
+
+  // Update browser tab title with pending count
+  useEffect(() => {
+    document.title = pendingCount > 0
+      ? `(${pendingCount}) Admin — Le Limonaie`
+      : 'Admin — Le Limonaie'
+  }, [pendingCount])
 
   const filteredBookings = bookings.filter(b => {
     if (activeFilter === 'tutte') return b.status !== 'cancelled'
@@ -102,12 +130,35 @@ export default function AdminPage() {
           </Link>
           <span style={{ color: 'rgba(253,248,240,0.5)', fontSize: '0.9rem' }}>/ Admin</span>
         </div>
-        <button
-          onClick={handleLogout}
-          style={{ background: 'none', border: '1px solid rgba(253,248,240,0.3)', color: 'rgba(253,248,240,0.7)', padding: '0.4rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}
-        >
-          Esci
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* Notification bell */}
+          <button
+            onClick={() => { setActiveView('lista'); setActiveFilter('tutte'); setNewAlert(false) }}
+            style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '0.4rem', color: 'rgba(253,248,240,0.7)', fontSize: '1.2rem', lineHeight: 1 }}
+            title={pendingCount > 0 ? `${pendingCount} prenotazioni in attesa` : 'Nessuna prenotazione in attesa'}
+          >
+            🔔
+            {pendingCount > 0 && (
+              <span style={{
+                position: 'absolute', top: '0', right: '0',
+                background: newAlert ? '#ef4444' : '#C4603C',
+                color: '#fff', fontSize: '0.65rem', fontWeight: 700,
+                borderRadius: '9999px', minWidth: '16px', height: '16px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '0 3px', lineHeight: 1,
+                animation: newAlert ? 'pulse 1s infinite' : 'none',
+              }}>
+                {pendingCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{ background: 'none', border: '1px solid rgba(253,248,240,0.3)', color: 'rgba(253,248,240,0.7)', padding: '0.4rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}
+          >
+            Esci
+          </button>
+        </div>
       </header>
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>

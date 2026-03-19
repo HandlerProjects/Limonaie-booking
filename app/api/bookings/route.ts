@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { calculateTotalPrice } from '@/lib/pricing'
 import { Room } from '@/lib/types'
+import { generateActionToken } from '@/lib/token'
+import { ownerNotificationEmail } from '@/lib/emailTemplates'
 
 async function sendTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN
@@ -62,7 +64,6 @@ export async function POST(request: NextRequest) {
     }
 
     const room = roomData as Room
-    const property = (roomData as any).properties
     const total_price = calculateTotalPrice(checkInDate, checkOutDate, room)
 
     const { data: booking, error: insertError } = await getSupabaseAdmin()
@@ -86,55 +87,61 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Errore durante la prenotazione. Riprova.' }, { status: 500 })
     }
 
-    const formatDateIT = (dateStr: string) =>
-      new Date(dateStr + 'T00:00:00').toLocaleDateString('it-IT', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    const fmtLong = (d: string) =>
+      new Date(d + 'T00:00:00').toLocaleDateString('it-IT', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
       })
+    const fmtShort = (d: string) =>
+      new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
 
-    const fmtShort = (dateStr: string) =>
-      new Date(dateStr + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
-
-    const checkInFormatted = formatDateIT(check_in)
-    const checkOutFormatted = formatDateIT(check_out)
     const priceFormatted = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(total_price)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
-    // Telegram notification to owner (instant, mobile push)
+    // One-click action URLs (no login required)
+    const confirmToken = generateActionToken(booking.id, 'confirmed')
+    const cancelToken = generateActionToken(booking.id, 'cancelled')
+    const confirmUrl = `${siteUrl}/api/admin/quick-action?id=${booking.id}&action=confirmed&token=${confirmToken}`
+    const cancelUrl = `${siteUrl}/api/admin/quick-action?id=${booking.id}&action=cancelled&token=${cancelToken}`
+
+    // Beautiful HTML email to owner with one-click buttons
+    try {
+      await resend.emails.send({
+        from: 'Le Limonaie Sistema <onboarding@resend.dev>',
+        to: process.env.OWNER_EMAIL || 'info@lelimonaieamare.it',
+        subject: `🍋 Nuova prenotazione — ${guest_name} — ${fmtShort(check_in)}`,
+        html: ownerNotificationEmail({
+          guestName: guest_name,
+          guestPhone: guest_phone,
+          guestEmail: guest_email,
+          roomName: room.name,
+          checkIn: fmtLong(check_in),
+          checkOut: fmtLong(check_out),
+          nights,
+          price: priceFormatted,
+          notes,
+          confirmUrl,
+          cancelUrl,
+          siteUrl,
+        }),
+      })
+    } catch (emailError) {
+      console.error('Owner email error:', emailError)
+    }
+
+    // Telegram instant notification (if configured)
     await sendTelegram(
       `🍋 <b>Nuova richiesta di prenotazione!</b>\n\n` +
       `👤 <b>${guest_name}</b>\n` +
       `📱 ${guest_phone}\n` +
       `✉️ ${guest_email}\n\n` +
       `📍 <b>${room.name}</b>\n` +
-      `📅 ${fmtShort(check_in)} → ${fmtShort(check_out)}  (${nights} nott${nights === 1 ? 'e' : 'i'})\n` +
+      `📅 ${fmtShort(check_in)} → ${fmtShort(check_out)} (${nights} nott${nights === 1 ? 'e' : 'i'})\n` +
       `💶 <b>${priceFormatted}</b>\n` +
       (notes ? `📝 ${notes}\n` : '') +
       `\n<a href="${siteUrl}/admin">Apri pannello admin →</a>`
     )
 
-    // Owner email notification
-    try {
-      await resend.emails.send({
-        from: 'Le Limonaie Sistema <onboarding@resend.dev>',
-        to: process.env.OWNER_EMAIL || 'info@lelimonaieamare.it',
-        subject: `🏠 Nuova prenotazione — ${guest_name} — ${check_in}`,
-        text:
-          `Nuova prenotazione ricevuta:\n\n` +
-          `Ospite: ${guest_name}\n` +
-          `Email: ${guest_email}\n` +
-          `Telefono: ${guest_phone}\n` +
-          `Camera: ${room.name}\n` +
-          `Arrivo: ${checkInFormatted}\n` +
-          `Partenza: ${checkOutFormatted}\n` +
-          `Totale: ${priceFormatted}\n` +
-          `Note: ${notes || 'Nessuna'}\n\n` +
-          `Pannello admin: ${siteUrl}/admin`,
-      })
-    } catch (emailError) {
-      console.error('Owner email error:', emailError)
-    }
-
-    // Guest receipt (works once domain is verified in Resend)
+    // Receipt email to guest
     try {
       await resend.emails.send({
         from: 'Le Limonaie <onboarding@resend.dev>',
@@ -143,14 +150,12 @@ export async function POST(request: NextRequest) {
         text:
           `Gentile ${guest_name},\n\n` +
           `Abbiamo ricevuto la sua richiesta di prenotazione. La contatteremo presto per confermarla.\n\n` +
-          `Riepilogo:\n` +
           `Camera: ${room.name}\n` +
-          `Check-in: ${checkInFormatted}\n` +
-          `Check-out: ${checkOutFormatted}\n` +
+          `Check-in: ${fmtLong(check_in)}\n` +
+          `Check-out: ${fmtLong(check_out)}\n` +
           `Totale stimato: ${priceFormatted}\n\n` +
           `Per qualsiasi necessità:\n` +
-          `Tel: +39 339 59 66 527\n` +
-          `Email: info@lelimonaieamare.it\n\n` +
+          `Tel: +39 339 59 66 527\n\n` +
           `— Lo staff di Le Limonaie`,
       })
     } catch (emailError) {
