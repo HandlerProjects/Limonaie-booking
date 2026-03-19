@@ -7,6 +7,7 @@ import { Room } from '@/lib/types'
 import { calculateTotalPrice, formatPrice } from '@/lib/pricing'
 import BookingCalendar from '@/app/components/BookingCalendar'
 import { ROOM_DATA } from '@/lib/roomData'
+import Lightbox from '@/app/components/Lightbox'
 
 type PropertyData = {
   id: string; slug: string; name: string; address: string; description: string; rooms: Room[]
@@ -14,73 +15,101 @@ type PropertyData = {
 
 const STEPS = ['Camera', 'Date', 'Dati personali']
 
-// ─── Photo gallery with CSS crossfade ────────────────────
+// ─── Photo gallery with CSS crossfade + lightbox ─────────
 function RoomGallery({ images, roomName }: { images: string[]; roomName: string }) {
   const [idx, setIdx] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxStart, setLightboxStart] = useState(0)
 
   if (!images.length) return null
 
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
   const next = () => setIdx(i => (i + 1) % images.length)
 
+  function openLightbox(e: React.MouseEvent) {
+    e.stopPropagation()
+    setLightboxStart(idx)
+    setLightboxOpen(true)
+  }
+
   return (
-    <div style={{ position: 'relative', height: '240px', overflow: 'hidden', borderRadius: '0.875rem 0.875rem 0 0' }}>
-      {/* All images stacked — only the active one is visible via opacity */}
-      {images.map((src, i) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={src}
-          src={src}
-          alt={i === 0 ? roomName : ''}
+    <>
+      <div style={{ position: 'relative', height: '240px', overflow: 'hidden', borderRadius: '0.875rem 0.875rem 0 0' }}>
+        {/* All images stacked */}
+        {images.map((src, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={src}
+            src={src}
+            alt={i === 0 ? roomName : ''}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%', objectFit: 'cover',
+              opacity: i === idx ? 1 : 0,
+              transition: 'opacity 0.55s ease',
+              zIndex: i === idx ? 1 : 0,
+            }}
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ))}
+
+        {/* Gradient overlay */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 55%)', zIndex: 2, pointerEvents: 'none' }} />
+
+        {/* Zoom hint — click to open lightbox */}
+        <button
+          onClick={openLightbox}
           style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%', objectFit: 'cover',
-            opacity: i === idx ? 1 : 0,
-            transition: 'opacity 0.55s ease',
-            zIndex: i === idx ? 1 : 0,
+            position: 'absolute', top: '10px', left: '10px', zIndex: 4,
+            background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(4px)',
+            border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem',
+            color: '#fff', fontSize: '0.7rem', padding: '4px 10px',
+            cursor: 'zoom-in', display: 'flex', alignItems: 'center', gap: '5px',
+            transition: 'background-color 0.2s ease',
           }}
-          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.6)')}
+          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.38)')}
+        >
+          🔍 Espandi
+        </button>
+
+        {images.length > 1 && (
+          <>
+            <button onClick={e => { e.stopPropagation(); prev() }} style={arrowBtn('left')}>‹</button>
+            <button onClick={e => { e.stopPropagation(); next() }} style={arrowBtn('right')}>›</button>
+
+            {/* Dots */}
+            <div style={{ position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '5px', zIndex: 3 }}>
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={e => { e.stopPropagation(); setIdx(i) }}
+                  style={{
+                    width: i === idx ? '20px' : '7px', height: '7px',
+                    borderRadius: '9999px', border: 'none', cursor: 'pointer', padding: 0,
+                    backgroundColor: i === idx ? '#fff' : 'rgba(255,255,255,0.5)',
+                    transition: 'width 0.3s ease, background-color 0.3s ease',
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', color: '#fff', fontSize: '0.7rem', padding: '2px 8px', borderRadius: '9999px', zIndex: 3 }}>
+              {idx + 1}/{images.length}
+            </div>
+          </>
+        )}
+      </div>
+
+      {lightboxOpen && (
+        <Lightbox
+          images={images}
+          startIndex={lightboxStart}
+          roomName={roomName}
+          onClose={() => setLightboxOpen(false)}
         />
-      ))}
-
-      {/* Gradient overlay */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 55%)', zIndex: 2, pointerEvents: 'none' }} />
-
-      {images.length > 1 && (
-        <>
-          {/* Arrows */}
-          <button
-            onClick={e => { e.stopPropagation(); prev() }}
-            style={arrowBtn('left')}
-          >‹</button>
-          <button
-            onClick={e => { e.stopPropagation(); next() }}
-            style={arrowBtn('right')}
-          >›</button>
-
-          {/* Dots */}
-          <div style={{ position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '5px', zIndex: 3 }}>
-            {images.map((_, i) => (
-              <button
-                key={i}
-                onClick={e => { e.stopPropagation(); setIdx(i) }}
-                style={{
-                  width: i === idx ? '20px' : '7px', height: '7px',
-                  borderRadius: '9999px', border: 'none', cursor: 'pointer', padding: 0,
-                  backgroundColor: i === idx ? '#fff' : 'rgba(255,255,255,0.5)',
-                  transition: 'width 0.3s ease, background-color 0.3s ease',
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Counter */}
-          <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: '0.7rem', padding: '2px 8px', borderRadius: '9999px', zIndex: 3, backdropFilter: 'blur(4px)' }}>
-            {idx + 1}/{images.length}
-          </div>
-        </>
       )}
-    </div>
+    </>
   )
 }
 

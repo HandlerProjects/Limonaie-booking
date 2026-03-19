@@ -1,8 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
+import Lightbox from '@/app/components/Lightbox'
+import { ROOM_DATA } from '@/lib/roomData'
+
+// All property images grouped
+const CENTRO_IMAGES = [
+  ...ROOM_DATA['Camera dei Limoni'].images,
+  ...ROOM_DATA['Camera dei Papaveri'].images,
+  ...ROOM_DATA['Suite delle Rose'].images,
+]
+const COUNTRYHOUSE_IMAGES = ROOM_DATA['Country House Completa'].images
 
 export default function HomePage() {
+  const [lightbox, setLightbox] = useState<{ images: string[]; idx: number; name: string } | null>(null)
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#FDF8F0', color: '#1A1A1A' }}>
       {/* Hero Section */}
@@ -142,7 +154,10 @@ export default function HomePage() {
               flexDirection: 'column',
             }}>
               {/* Real room photo */}
-              <div style={{ height: '240px', position: 'relative', overflow: 'hidden' }}>
+              <div
+                style={{ height: '240px', position: 'relative', overflow: 'hidden', cursor: 'zoom-in' }}
+                onClick={() => setLightbox({ images: CENTRO_IMAGES, idx: 0, name: 'Le Limonaie in Centro' })}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="https://lelimonaieincentro.it/wp-content/uploads/2025/03/585397032.jpg"
@@ -152,6 +167,9 @@ export default function HomePage() {
                   onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
                 />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
+                <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem', color: '#fff', fontSize: '0.7rem', padding: '4px 10px' }}>
+                  🔍 {CENTRO_IMAGES.length} foto
+                </div>
                 <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
                   <span style={{ color: '#fff', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
                     Centro storico · San Benedetto del Tronto
@@ -234,7 +252,10 @@ export default function HomePage() {
               flexDirection: 'column',
             }}>
               {/* Real country house photo */}
-              <div style={{ height: '240px', position: 'relative', overflow: 'hidden' }}>
+              <div
+                style={{ height: '240px', position: 'relative', overflow: 'hidden', cursor: 'zoom-in' }}
+                onClick={() => setLightbox({ images: COUNTRYHOUSE_IMAGES, idx: 0, name: 'Country House a Mare' })}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="https://lelimonaieincentro.it/wp-content/uploads/2025/04/b-b-Country-House-min.jpg"
@@ -244,6 +265,9 @@ export default function HomePage() {
                   onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
                 />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
+                <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem', color: '#fff', fontSize: '0.7rem', padding: '4px 10px' }}>
+                  🔍 {COUNTRYHOUSE_IMAGES.length} foto
+                </div>
                 <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
                   <span style={{ color: '#fff', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
                     Campagna & mare · C.da Santa Lucia
@@ -429,6 +453,15 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {lightbox && (
+        <Lightbox
+          images={lightbox.images}
+          startIndex={lightbox.idx}
+          roomName={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   )
 }
