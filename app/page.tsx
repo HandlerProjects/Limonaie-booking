@@ -132,7 +132,7 @@ export default function HomePage() {
             gap: '2rem',
           }}>
             {/* Property 1 — Centro */}
-            <div style={{
+            <div className="card-hover" style={{
               backgroundColor: '#fff',
               borderRadius: '1.5rem',
               overflow: 'hidden',
@@ -147,7 +147,9 @@ export default function HomePage() {
                 <img
                   src="https://lelimonaieincentro.it/wp-content/uploads/2025/03/585397032.jpg"
                   alt="Camera dei Papaveri — Le Limonaie in Centro"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
                 />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
                 <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
@@ -222,7 +224,7 @@ export default function HomePage() {
             </div>
 
             {/* Property 2 — Country House */}
-            <div style={{
+            <div className="card-hover" style={{
               backgroundColor: '#fff',
               borderRadius: '1.5rem',
               overflow: 'hidden',
@@ -237,7 +239,9 @@ export default function HomePage() {
                 <img
                   src="https://lelimonaieincentro.it/wp-content/uploads/2025/04/b-b-Country-House-min.jpg"
                   alt="Country House Le Limonaie a Mare"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
                 />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%)' }} />
                 <div style={{ position: 'absolute', bottom: '1rem', left: '1.25rem' }}>
