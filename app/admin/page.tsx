@@ -185,10 +185,10 @@ export default function AdminPage() {
 
   // Filter by tab, then by search
   const tabFilteredBookings = bookings.filter(b => {
-    if (activeFilter === 'tutte') return b.status !== 'cancelled'
+    if (activeFilter === 'tutte') return true
     if (activeFilter === 'cancellate') return b.status === 'cancelled'
     if (activeFilter === 'arrivo') return b.check_in >= today && b.status !== 'cancelled'
-    if (activeFilter === 'passate') return b.check_out < today && b.status !== 'cancelled'
+    if (activeFilter === 'passate') return b.check_out < today
     return true
   })
 
