@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: 'Le Limonaie — San Benedetto del Tronto',
   description: 'Prenotazione online per Le Limonaie in Centro e Country House Le Limonaie a Mare — San Benedetto del Tronto (AP)',
   keywords: 'affittacamere, bed and breakfast, San Benedetto del Tronto, country house, Marche, costa adriatica',
+  appleWebApp: {
+    capable: true,
+    title: 'Le Limonaie',
+    statusBarStyle: 'black-translucent',
+  },
 }
 
 export default function RootLayout({
