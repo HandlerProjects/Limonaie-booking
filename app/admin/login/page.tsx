@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 export default function AdminLoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,7 +19,7 @@ export default function AdminLoginPage() {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       })
 
       if (res.ok) {
@@ -60,15 +60,15 @@ export default function AdminLoginPage() {
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1A1A1A' }}>
-                Email
+                Utente
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="admin@lelimonaie.it"
-                autoComplete="email"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="admin"
+                autoComplete="username"
                 style={inputStyle}
                 onFocus={e => (e.target.style.borderColor = '#C4603C')}
                 onBlur={e => (e.target.style.borderColor = '#d4cfc8')}
