@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vercel env *)",
+      "Bash(vercel whoami *)",
+      "Bash(vercel link *)",
+      "Bash(vercel teams *)",
+      "Bash(vercel --prod --yes)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\alexb\\Desktop\\Limonaie-Booking\\app\\api\\admin"
+    ]
+  }
+}
