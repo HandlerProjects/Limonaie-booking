@@ -61,6 +61,13 @@ export default function AdminPage() {
   const [savedRoom, setSavedRoom] = useState<string | null>(null)
   const [newPhotoUrl, setNewPhotoUrl] = useState<Record<string, string>>({})
   const [savingPhoto, setSavingPhoto] = useState<string | null>(null)
+  const [seasons, setSeasons] = useState({
+    alta_start: '07-28', alta_end: '08-27',
+    media1_start: '06-28', media1_end: '07-27',
+    media2_start: '08-28', media2_end: '09-14',
+  })
+  const [savingSeasons, setSavingSeasons] = useState(false)
+  const [savedSeasons, setSavedSeasons] = useState(false)
 
   const loadBookings = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -89,6 +96,40 @@ export default function AdminPage() {
       if (!silent) setLoading(false)
     }
   }, [router])
+
+  const loadSettings = useCallback(async () => {
+    const res = await fetch('/api/admin/settings')
+    const data = await res.json()
+    if (data && !data.error) {
+      setSeasons({
+        alta_start: data.season_alta_start || '07-28',
+        alta_end: data.season_alta_end || '08-27',
+        media1_start: data.season_media1_start || '06-28',
+        media1_end: data.season_media1_end || '07-27',
+        media2_start: data.season_media2_start || '08-28',
+        media2_end: data.season_media2_end || '09-14',
+      })
+    }
+  }, [])
+
+  async function saveSeasons() {
+    setSavingSeasons(true)
+    await fetch('/api/admin/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_alta_start: seasons.alta_start,
+        season_alta_end: seasons.alta_end,
+        season_media1_start: seasons.media1_start,
+        season_media1_end: seasons.media1_end,
+        season_media2_start: seasons.media2_start,
+        season_media2_end: seasons.media2_end,
+      }),
+    })
+    setSavingSeasons(false)
+    setSavedSeasons(true)
+    setTimeout(() => setSavedSeasons(false), 2000)
+  }
 
   const loadRooms = useCallback(async () => {
     const res = await fetch('/api/admin/rooms')
@@ -156,9 +197,10 @@ export default function AdminPage() {
   useEffect(() => {
     loadBookings()
     loadRooms()
+    loadSettings()
     const interval = setInterval(() => loadBookings(true), 30000)
     return () => clearInterval(interval)
-  }, [loadBookings, loadRooms])
+  }, [loadBookings, loadRooms, loadSettings])
 
   async function updateStatus(id: string, status: string) {
     setUpdatingId(id)
@@ -501,10 +543,58 @@ export default function AdminPage() {
         {/* IMPOSTAZIONI VIEW */}
         {activeView === 'impostazioni' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+            {/* STAGIONI */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+              <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A' }}>📅 Date delle stagioni</h3>
+              <p style={{ margin: '0 0 1.5rem', fontSize: '0.88rem', color: '#6B6B5A' }}>Imposta le date di inizio e fine di ogni stagione. Formato: MM-GG (es. 07-28 = 28 luglio)</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {[
+                  { key: 'alta', label: '🔴 Alta stagione', color: '#dc2626', bg: '#fef2f2', startKey: 'alta_start', endKey: 'alta_end' },
+                  { key: 'media1', label: '🟡 Media stagione (1°)', color: '#92610a', bg: '#fef9ee', startKey: 'media1_start', endKey: 'media1_end' },
+                  { key: 'media2', label: '🟡 Media stagione (2°)', color: '#92610a', bg: '#fef9ee', startKey: 'media2_start', endKey: 'media2_end' },
+                ].map(s => (
+                  <div key={s.key} style={{ border: `1px solid`, borderColor: s.bg === '#fef2f2' ? '#fecaca' : '#fde68a', borderRadius: '0.75rem', padding: '1rem 1.25rem', backgroundColor: s.bg }}>
+                    <div style={{ fontWeight: 700, color: s.color, marginBottom: '0.75rem', fontSize: '0.95rem' }}>{s.label}</div>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <label style={{ fontSize: '0.72rem', color: '#9B9B8A', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inizio (MM-GG)</label>
+                        <input
+                          type="text"
+                          placeholder="es. 07-28"
+                          value={seasons[s.startKey as keyof typeof seasons]}
+                          onChange={e => setSeasons(prev => ({ ...prev, [s.startKey]: e.target.value }))}
+                          style={{ padding: '0.5rem 0.75rem', border: '1px solid #e0dbd0', borderRadius: '0.5rem', fontSize: '0.95rem', width: '100px', outline: 'none' }}
+                        />
+                      </div>
+                      <span style={{ color: '#9B9B8A', marginTop: '1rem' }}>→</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <label style={{ fontSize: '0.72rem', color: '#9B9B8A', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fine (MM-GG)</label>
+                        <input
+                          type="text"
+                          placeholder="es. 08-27"
+                          value={seasons[s.endKey as keyof typeof seasons]}
+                          onChange={e => setSeasons(prev => ({ ...prev, [s.endKey]: e.target.value }))}
+                          style={{ padding: '0.5rem 0.75rem', border: '1px solid #e0dbd0', borderRadius: '0.5rem', fontSize: '0.95rem', width: '100px', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={saveSeasons}
+                disabled={savingSeasons}
+                style={{ marginTop: '1.25rem', padding: '0.65rem 1.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', backgroundColor: savedSeasons ? '#166534' : '#2D4A3E', color: '#fff', fontWeight: 600, fontSize: '0.9rem', transition: 'background-color 0.2s' }}
+              >
+                {savingSeasons ? 'Salvo...' : savedSeasons ? '✓ Stagioni salvate' : 'Salva stagioni'}
+              </button>
+            </div>
+
             {/* PREZZI */}
             <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
               <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A' }}>💶 Prezzi per stagione</h3>
-              <p style={{ margin: '0 0 1.5rem', fontSize: '0.82rem', color: '#9B9B8A' }}>Bassa: 15 set – 27 giu · Media: 28 giu – 27 lug / 28 ago – 14 set · Alta: 28 lug – 27 ago</p>
+              <p style={{ margin: '0 0 1.5rem', fontSize: '0.88rem', color: '#6B6B5A' }}>Modifica il prezzo per notte di ogni camera in base alla stagione.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {rooms.map(room => {
                   const p = editedPrices[room.id] || { low: '', mid: '', high: '' }

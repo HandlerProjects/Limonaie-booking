@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { guestConfirmEmail, guestCancelEmail } from '@/lib/emailTemplates'
+
+function getGmailTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.OWNER_EMAIL, pass: process.env.GMAIL_APP_PASSWORD },
+  })
+}
 
 async function sendTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN
@@ -81,25 +88,26 @@ export async function PATCH(
       (new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24)
     )
     const priceFormatted = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(booking.total_price)
-    const resend = new Resend(process.env.RESEND_API_KEY)
 
     if (status === 'confirmed') {
-      try {
-        await resend.emails.send({
-          from: 'Le Limonaie <onboarding@resend.dev>',
-          to: booking.guest_email,
-          subject: '✅ Prenotazione confermata — Le Limonaie',
-          html: guestConfirmEmail({
-            guestName: booking.guest_name,
-            roomName,
-            checkIn: fmtLong(booking.check_in),
-            checkOut: fmtLong(booking.check_out),
-            nights,
-            price: priceFormatted,
-          }),
-        })
-      } catch (e) {
-        console.error('Confirm email error:', e)
+      if (process.env.GMAIL_APP_PASSWORD) {
+        try {
+          await getGmailTransporter().sendMail({
+            from: `"Le Limonaie" <${process.env.OWNER_EMAIL}>`,
+            to: booking.guest_email,
+            subject: '✅ Prenotazione confermata — Le Limonaie',
+            html: guestConfirmEmail({
+              guestName: booking.guest_name,
+              roomName,
+              checkIn: fmtLong(booking.check_in),
+              checkOut: fmtLong(booking.check_out),
+              nights,
+              price: priceFormatted,
+            }),
+          })
+        } catch (e) {
+          console.error('Confirm email error:', e)
+        }
       }
 
       await sendTelegram(
@@ -110,20 +118,22 @@ export async function PATCH(
     }
 
     if (status === 'cancelled') {
-      try {
-        await resend.emails.send({
-          from: 'Le Limonaie <onboarding@resend.dev>',
-          to: booking.guest_email,
-          subject: 'Prenotazione — Le Limonaie',
-          html: guestCancelEmail({
-            guestName: booking.guest_name,
-            roomName,
-            checkIn: fmtLong(booking.check_in),
-            checkOut: fmtLong(booking.check_out),
-          }),
-        })
-      } catch (e) {
-        console.error('Cancel email error:', e)
+      if (process.env.GMAIL_APP_PASSWORD) {
+        try {
+          await getGmailTransporter().sendMail({
+            from: `"Le Limonaie" <${process.env.OWNER_EMAIL}>`,
+            to: booking.guest_email,
+            subject: 'Prenotazione — Le Limonaie',
+            html: guestCancelEmail({
+              guestName: booking.guest_name,
+              roomName,
+              checkIn: fmtLong(booking.check_in),
+              checkOut: fmtLong(booking.check_out),
+            }),
+          })
+        } catch (e) {
+          console.error('Cancel email error:', e)
+        }
       }
 
       await sendTelegram(
