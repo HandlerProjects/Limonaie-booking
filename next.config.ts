@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'lelimonaieincentro.it',
       },
+      {
+        protocol: 'https',
+        hostname: 'yzxwdsftbauhdmasiqoh.supabase.co',
+      },
     ],
   },
 };

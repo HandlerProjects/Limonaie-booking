@@ -59,8 +59,8 @@ export default function AdminPage() {
   const [editedPrices, setEditedPrices] = useState<Record<string, { low: string; mid: string; high: string }>>({})
   const [savingRoom, setSavingRoom] = useState<string | null>(null)
   const [savedRoom, setSavedRoom] = useState<string | null>(null)
-  const [newPhotoUrl, setNewPhotoUrl] = useState<Record<string, string>>({})
   const [savingPhoto, setSavingPhoto] = useState<string | null>(null)
+  const [dragInfo, setDragInfo] = useState<{ roomId: string; idx: number } | null>(null)
   const [seasons, setSeasons] = useState({
     alta_start: '07-28', alta_end: '08-27',
     media1_start: '06-28', media1_end: '07-27',
@@ -167,19 +167,16 @@ export default function AdminPage() {
     loadRooms()
   }
 
-  async function addPhoto(roomId: string) {
-    const url = newPhotoUrl[roomId]?.trim()
-    if (!url) return
+  async function handleFileUpload(roomId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
     setSavingPhoto(roomId)
-    const room = rooms.find(r => r.id === roomId)
-    const currentPhotos = room?.photos || []
-    await fetch('/api/admin/rooms', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: roomId, photos: [...currentPhotos, url] }),
-    })
-    setNewPhotoUrl(prev => ({ ...prev, [roomId]: '' }))
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('room_id', roomId)
+    await fetch('/api/admin/rooms/photos', { method: 'POST', body: fd })
     setSavingPhoto(null)
+    e.target.value = ''
     loadRooms()
   }
 
@@ -190,6 +187,20 @@ export default function AdminPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: roomId, photos: updated }),
+    })
+    loadRooms()
+  }
+
+  async function reorderPhoto(roomId: string, fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return
+    const room = rooms.find(r => r.id === roomId)
+    const photos = [...(room?.photos || [])]
+    const [moved] = photos.splice(fromIdx, 1)
+    photos.splice(toIdx, 0, moved)
+    await fetch('/api/admin/rooms', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: roomId, photos }),
     })
     loadRooms()
   }
@@ -646,42 +657,65 @@ export default function AdminPage() {
             {/* FOTO */}
             <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
               <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A' }}>🖼️ Foto delle camere</h3>
-              <p style={{ margin: '0 0 1.5rem', fontSize: '0.82rem', color: '#9B9B8A' }}>Aggiungi URL di foto extra per ogni camera. Vengono mostrate in cima alla galleria.</p>
+              <p style={{ margin: '0 0 1.5rem', fontSize: '0.88rem', color: '#6B6B5A' }}>Carica foto dal tuo dispositivo. Trascina per riordinarle. Accetta JPG, PNG, WEBP, HEIC e altri formati.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {rooms.map(room => (
                   <div key={room.id} style={{ border: '1px solid #f0ebe0', borderRadius: '0.75rem', padding: '1.25rem' }}>
                     <div style={{ fontWeight: 600, color: '#1A1A1A', marginBottom: '1rem', fontSize: '0.95rem' }}>{room.name}</div>
-                    {/* Current photos */}
-                    {(room.photos || []).length > 0 && (
-                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                        {(room.photos || []).map((url, idx) => (
-                          <div key={idx} style={{ position: 'relative', width: '100px', height: '70px' }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #e0dbd0' }} />
-                            <button
-                              onClick={() => removePhoto(room.id, url)}
-                              style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
-                            >×</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {/* Add photo URL */}
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        type="url"
-                        placeholder="https://... (URL della foto)"
-                        value={newPhotoUrl[room.id] || ''}
-                        onChange={e => setNewPhotoUrl(prev => ({ ...prev, [room.id]: e.target.value }))}
-                        style={{ flex: 1, padding: '0.5rem 0.75rem', border: '1px solid #e0dbd0', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none' }}
-                      />
-                      <button
-                        onClick={() => addPhoto(room.id)}
-                        disabled={!newPhotoUrl[room.id] || savingPhoto === room.id}
-                        style={{ padding: '0.5rem 1rem', backgroundColor: '#C4603C', color: '#fff', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                      {(room.photos || []).map((url, idx) => (
+                        <div
+                          key={url}
+                          draggable
+                          onDragStart={() => setDragInfo({ roomId: room.id, idx })}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragInfo && dragInfo.roomId === room.id) {
+                              reorderPhoto(room.id, dragInfo.idx, idx)
+                              setDragInfo(null)
+                            }
+                          }}
+                          style={{
+                            position: 'relative', width: '100px', height: '75px',
+                            cursor: 'grab', opacity: dragInfo?.roomId === room.id && dragInfo?.idx === idx ? 0.4 : 1,
+                            transition: 'opacity 0.15s',
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #e0dbd0', display: 'block' }} />
+                          <button
+                            onClick={() => removePhoto(room.id, url)}
+                            style={{ position: 'absolute', top: '-7px', right: '-7px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', border: '2px solid #fff', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, lineHeight: 1 }}
+                          >×</button>
+                          <div style={{ position: 'absolute', bottom: '-18px', left: 0, right: 0, textAlign: 'center', fontSize: '0.6rem', color: '#C8C4BC' }}>⠿ trascina</div>
+                        </div>
+                      ))}
+                      {/* + Upload button */}
+                      <label style={{
+                        width: '100px', height: '75px', border: '2px dashed #C8C4BC', borderRadius: '0.5rem',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        cursor: savingPhoto === room.id ? 'wait' : 'pointer',
+                        color: '#9B9B8A', gap: '0.2rem', transition: 'border-color 0.15s, color 0.15s',
+                        backgroundColor: '#fafaf8',
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4603C'; e.currentTarget.style.color = '#C4603C' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#C8C4BC'; e.currentTarget.style.color = '#9B9B8A' }}
                       >
-                        {savingPhoto === room.id ? '...' : '+ Aggiungi'}
-                      </button>
+                        {savingPhoto === room.id
+                          ? <span style={{ fontSize: '0.75rem' }}>Carico...</span>
+                          : <>
+                              <span style={{ fontSize: '1.75rem', lineHeight: 1 }}>+</span>
+                              <span style={{ fontSize: '0.65rem' }}>Aggiungi foto</span>
+                            </>
+                        }
+                        <input
+                          type="file"
+                          accept="image/*,.heic,.heif"
+                          style={{ display: 'none' }}
+                          disabled={savingPhoto === room.id}
+                          onChange={e => handleFileUpload(room.id, e)}
+                        />
+                      </label>
                     </div>
                   </div>
                 ))}
