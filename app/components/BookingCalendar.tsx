@@ -54,6 +54,11 @@ export default function BookingCalendar({ roomId, checkIn, checkOut, onChange }:
 
   function handleClick(date: string) {
     if (date < today || isBooked(date)) return
+    // Click on already-selected check-in → reset
+    if (checkIn && !checkOut && date === checkIn) {
+      onChange('', '')
+      return
+    }
     if (!checkIn || (checkIn && checkOut)) {
       onChange(date, '')
     } else {
@@ -198,11 +203,21 @@ export default function BookingCalendar({ roomId, checkIn, checkOut, onChange }:
       </div>
 
       {/* Hint */}
-      <p style={{ fontSize: '0.8rem', color: '#9B9B8A', marginTop: '0.75rem', minHeight: '1.2em' }}>
-        {!checkIn && 'Clicca un giorno per scegliere il check-in'}
-        {checkIn && !checkOut && `Check-in: ${checkIn} — ora clicca il check-out`}
-        {checkIn && checkOut && `✓ ${checkIn} → ${checkOut}`}
-      </p>
+      <div style={{ marginTop: '0.75rem', minHeight: '1.5em', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <p style={{ fontSize: '0.8rem', color: '#9B9B8A', margin: 0 }}>
+          {!checkIn && 'Clicca un giorno per scegliere il check-in'}
+          {checkIn && !checkOut && `Check-in: ${checkIn} — ora clicca il check-out`}
+          {checkIn && checkOut && `✓ ${checkIn} → ${checkOut}`}
+        </p>
+        {checkIn && (
+          <button
+            onClick={() => onChange('', '')}
+            style={{ fontSize: '0.75rem', color: '#C4603C', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+          >
+            × Ricomincia
+          </button>
+        )}
+      </div>
 
       {loading && (
         <p style={{ fontSize: '0.78rem', color: '#9B9B8A' }}>Caricamento disponibilità...</p>
