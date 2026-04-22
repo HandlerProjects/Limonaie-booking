@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Booking } from '@/lib/types'
+import { Booking, Room } from '@/lib/types'
 import AdminCalendar from '@/app/components/AdminCalendar'
 
 type FilterTab = 'tutte' | 'arrivo' | 'passate' | 'cancellate'
-type ViewTab = 'lista' | 'calendario'
+type ViewTab = 'lista' | 'calendario' | 'impostazioni'
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   pending:   { label: 'In attesa',  color: '#92610a', bg: '#fef3c7' },
@@ -55,6 +55,12 @@ export default function AdminPage() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [newAlert, setNewAlert] = useState(false)
   const [search, setSearch] = useState('')
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [editedPrices, setEditedPrices] = useState<Record<string, { low: string; mid: string; high: string }>>({})
+  const [savingRoom, setSavingRoom] = useState<string | null>(null)
+  const [savedRoom, setSavedRoom] = useState<string | null>(null)
+  const [newPhotoUrl, setNewPhotoUrl] = useState<Record<string, string>>({})
+  const [savingPhoto, setSavingPhoto] = useState<string | null>(null)
 
   const loadBookings = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -84,12 +90,75 @@ export default function AdminPage() {
     }
   }, [router])
 
+  const loadRooms = useCallback(async () => {
+    const res = await fetch('/api/admin/rooms')
+    const data = await res.json()
+    if (Array.isArray(data)) {
+      setRooms(data)
+      const prices: Record<string, { low: string; mid: string; high: string }> = {}
+      data.forEach((r: Room) => {
+        prices[r.id] = {
+          low: String(r.price_low_season),
+          mid: String(r.price_mid_season),
+          high: String(r.price_high_season),
+        }
+      })
+      setEditedPrices(prices)
+    }
+  }, [])
+
+  async function savePrices(roomId: string) {
+    setSavingRoom(roomId)
+    const p = editedPrices[roomId]
+    await fetch('/api/admin/rooms', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: roomId,
+        price_low_season: parseFloat(p.low),
+        price_mid_season: parseFloat(p.mid),
+        price_high_season: parseFloat(p.high),
+      }),
+    })
+    setSavingRoom(null)
+    setSavedRoom(roomId)
+    setTimeout(() => setSavedRoom(null), 2000)
+    loadRooms()
+  }
+
+  async function addPhoto(roomId: string) {
+    const url = newPhotoUrl[roomId]?.trim()
+    if (!url) return
+    setSavingPhoto(roomId)
+    const room = rooms.find(r => r.id === roomId)
+    const currentPhotos = room?.photos || []
+    await fetch('/api/admin/rooms', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: roomId, photos: [...currentPhotos, url] }),
+    })
+    setNewPhotoUrl(prev => ({ ...prev, [roomId]: '' }))
+    setSavingPhoto(null)
+    loadRooms()
+  }
+
+  async function removePhoto(roomId: string, photoUrl: string) {
+    const room = rooms.find(r => r.id === roomId)
+    const updated = (room?.photos || []).filter(p => p !== photoUrl)
+    await fetch('/api/admin/rooms', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: roomId, photos: updated }),
+    })
+    loadRooms()
+  }
+
   useEffect(() => {
     loadBookings()
-    // Poll for new bookings every 30 seconds
+    loadRooms()
     const interval = setInterval(() => loadBookings(true), 30000)
     return () => clearInterval(interval)
-  }, [loadBookings])
+  }, [loadBookings, loadRooms])
 
   async function updateStatus(id: string, status: string) {
     setUpdatingId(id)
@@ -326,7 +395,7 @@ export default function AdminPage() {
         {/* View toggle */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e8e4dc', marginRight: '1rem' }}>
-            {[{ key: 'lista', label: '☰ Lista' }, { key: 'calendario', label: '📅 Calendario' }].map(v => (
+            {[{ key: 'lista', label: '☰ Lista' }, { key: 'calendario', label: '📅 Calendario' }, { key: 'impostazioni', label: '⚙️ Impostazioni' }].map(v => (
               <button
                 key={v.key}
                 onClick={() => setActiveView(v.key as ViewTab)}
@@ -426,6 +495,108 @@ export default function AdminPage() {
             ) : (
               <AdminCalendar bookings={bookings} />
             )}
+          </div>
+        )}
+
+        {/* IMPOSTAZIONI VIEW */}
+        {activeView === 'impostazioni' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            {/* PREZZI */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+              <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A' }}>💶 Prezzi per stagione</h3>
+              <p style={{ margin: '0 0 1.5rem', fontSize: '0.82rem', color: '#9B9B8A' }}>Bassa: 15 set – 27 giu · Media: 28 giu – 27 lug / 28 ago – 14 set · Alta: 28 lug – 27 ago</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {rooms.map(room => {
+                  const p = editedPrices[room.id] || { low: '', mid: '', high: '' }
+                  const isSaving = savingRoom === room.id
+                  const isSaved = savedRoom === room.id
+                  return (
+                    <div key={room.id} style={{ border: '1px solid #f0ebe0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                      <div style={{ fontWeight: 600, color: '#1A1A1A', marginBottom: '0.75rem', fontSize: '0.95rem' }}>{room.name}</div>
+                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                        {[
+                          { key: 'low', label: 'Bassa stagione' },
+                          { key: 'mid', label: 'Media stagione' },
+                          { key: 'high', label: 'Alta stagione' },
+                        ].map(({ key, label }) => (
+                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <label style={{ fontSize: '0.72rem', color: '#9B9B8A', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</label>
+                            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e0dbd0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                              <span style={{ padding: '0.5rem 0.6rem', backgroundColor: '#f9f6f0', color: '#9B9B8A', fontSize: '0.9rem', borderRight: '1px solid #e0dbd0' }}>€</span>
+                              <input
+                                type="number"
+                                value={p[key as 'low' | 'mid' | 'high']}
+                                onChange={e => setEditedPrices(prev => ({
+                                  ...prev,
+                                  [room.id]: { ...prev[room.id], [key]: e.target.value }
+                                }))}
+                                style={{ width: '80px', padding: '0.5rem 0.6rem', border: 'none', outline: 'none', fontSize: '0.95rem', fontWeight: 600 }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => savePrices(room.id)}
+                          disabled={isSaving}
+                          style={{
+                            padding: '0.55rem 1.25rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer',
+                            backgroundColor: isSaved ? '#166534' : '#2D4A3E', color: '#fff',
+                            fontWeight: 600, fontSize: '0.85rem', transition: 'background-color 0.2s',
+                          }}
+                        >
+                          {isSaving ? 'Salvo...' : isSaved ? '✓ Salvato' : 'Salva'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* FOTO */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '1rem', padding: '2rem', border: '1px solid #e8e4dc', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+              <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A' }}>🖼️ Foto delle camere</h3>
+              <p style={{ margin: '0 0 1.5rem', fontSize: '0.82rem', color: '#9B9B8A' }}>Aggiungi URL di foto extra per ogni camera. Vengono mostrate in cima alla galleria.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {rooms.map(room => (
+                  <div key={room.id} style={{ border: '1px solid #f0ebe0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <div style={{ fontWeight: 600, color: '#1A1A1A', marginBottom: '1rem', fontSize: '0.95rem' }}>{room.name}</div>
+                    {/* Current photos */}
+                    {(room.photos || []).length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                        {(room.photos || []).map((url, idx) => (
+                          <div key={idx} style={{ position: 'relative', width: '100px', height: '70px' }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #e0dbd0' }} />
+                            <button
+                              onClick={() => removePhoto(room.id, url)}
+                              style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Add photo URL */}
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="url"
+                        placeholder="https://... (URL della foto)"
+                        value={newPhotoUrl[room.id] || ''}
+                        onChange={e => setNewPhotoUrl(prev => ({ ...prev, [room.id]: e.target.value }))}
+                        style={{ flex: 1, padding: '0.5rem 0.75rem', border: '1px solid #e0dbd0', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none' }}
+                      />
+                      <button
+                        onClick={() => addPhoto(room.id)}
+                        disabled={!newPhotoUrl[room.id] || savingPhoto === room.id}
+                        style={{ padding: '0.5rem 1rem', backgroundColor: '#C4603C', color: '#fff', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                      >
+                        {savingPhoto === room.id ? '...' : '+ Aggiungi'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

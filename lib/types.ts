@@ -16,6 +16,7 @@ export type Room = {
   price_low_season: number
   price_mid_season: number
   price_high_season: number
+  photos: string[] | null
   created_at: string
 }
 
